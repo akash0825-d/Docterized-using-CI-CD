@@ -1,0 +1,71 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_HUB_USER  = 'akashpawar5519' 
+        IMAGE_NAME       = 'simple-html-app'
+        IMAGE_TAG        = "${BUILD_NUMBER}"
+        DOCKER_CREDS_ID  = 'docker-hub-credentials'
+        KILLERCODA_IP    = '172.30.1.2'          
+    }
+
+     triggers {
+        pollSCM('H/5 * * * *') 
+    }
+
+    stages {
+        stage('Git Checkout') {
+            steps {
+                git branch: 'main', url: 'https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    echo "Building HTML Image with Nginx..."
+                    sh "docker build -t ${DOCKER_HUB_USER}/${IMAGE_NAME}:${IMAGE_TAG} ."
+                    sh "docker build -t ${DOCKER_HUB_USER}/${IMAGE_NAME}:latest ."
+                }
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                script {
+                    echo "Pushing Image to Docker Hub..."
+                    withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDS_ID}", passwordVariable: 'DOCKER_PASS', usernameVariable: 'DOCKER_USER')]) {
+                        sh "echo \$DOCKER_PASS | docker login -u ${DOCKER_HUB_USER} --password-stdin"
+                        sh "docker push ${DOCKER_HUB_USER}/${IMAGE_NAME}:${IMAGE_TAG}"
+                        sh "docker push ${DOCKER_HUB_USER}/${IMAGE_NAME}:latest"
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to Killercoda') {
+            steps {
+                script {
+                    echo "Deploying to Killercoda Cluster..."
+                    
+                    sh "sed -i 's/DOCKER_HUB_USER/${DOCKER_HUB_USER}/g' k8s-deployment.yaml"
+                    
+                    withCredentials([sshUserPrivateKey(credentialsId: 'killercoda-ssh-key', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
+                        
+                        sh "scp -o StrictHostKeyChecking=no -i ${SSH_KEY} k8s-deployment.yaml ${SSH_USER}@${KILLERCODA_IP}:~/k8s-deployment.yaml"
+                        
+                        
+                        sh "ssh -o StrictHostKeyChecking=no -i ${SSH_KEY} ${SSH_USER}@${KILLERCODA_IP} 'kubectl apply -f ~/k8s-deployment.yaml && kubectl rollout restart deployment/html-app-deployment'"
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            echo "Cleaning up local images..."
+            sh "docker rmi ${DOCKER_HUB_USER}/${IMAGE_NAME}:${IMAGE_TAG} ${DOCKER_HUB_USER}/${IMAGE_NAME}:latest || true"
+        }
+    }
+}
