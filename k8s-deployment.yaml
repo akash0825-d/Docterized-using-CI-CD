@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: html-app-container
-        image: DOCKER_HUB_USER/simple-html-app:latest  # Jenkins इथे तुमचे युझरनेम ऑटोमॅटिक टाकेल
+        image: DOCKER_HUB_USER/simple-html-app:latest
         ports:
         - containerPort: 80
 ---
@@ -31,4 +31,4 @@ spec:
   ports:
     - port: 80
       targetPort: 80
-      nodePort: 30080  # किलॅकोडावर या पोर्टवर तुमची वेबसाईट दिसेल
+      nodePort: 30080
